@@ -1,0 +1,76 @@
+# ========== SmartFlow Prometheus 告警规则 ==========
+#
+# 功能：定义三条核心告警规则，Prometheus 定期评估，满足条件时推给 Alertmanager。
+# 数据流：Prometheus 每 15s 拉 /metrics → 评估这里的 PromQL 表达式
+#        → 条件满足 → 触发 alert → 发给 Alertmanager → 邮件/钉钉/企微通知
+#
+# 使用方式：把本文件路径加进 prometheus.yml 的 rule_files：
+#   rule_files:
+#     - /etc/prometheus/rules/smartflow-alerts.yml
+#
+# 为什么没实际部署：单机 demo 运维 3 个服务（Prometheus+Alertmanager+Grafana）成本 > 收益；
+# 规则代码真实可用，生产接入时直接复用。
+
+groups:
+  - name: smartflow
+    rules:
+
+      # ========== 告警1：请求延迟过高 ==========
+      # PromQL 解读：
+      #   histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+      #     → 过去 5 分钟的 P95 延迟（每 15s 采样一次，rate 算出每秒增长速率）
+      #   by (path) → 按 path 分组算，只看 /chat/stream（最核心的接口）
+      #   > 2 → P95 超过 2 秒
+      #   for: 5m → 持续 5 分钟才告警（避免瞬时抖动误报）
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{path="/chat/stream"}[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "聊天接口 P95 延迟超过 2 秒"
+          description: "当前 P95 延迟 {{ $value }} 秒，持续 5 分钟。可能原因：LLM 响应变慢、检索超时、DB 慢查询。"
+
+      # ========== 告警2：熔断器打开 ==========
+      # PromQL 解读：
+      #   max by (tier) (circuit_breaker_state) == 1
+      #     → 取每个 tier 的最大值（多副本部署时，任一副本拉闸即告警）
+      #     → == 1 表示熔断器处于打开（拉闸）状态
+      #   for: 1m → 拉闸持续 1 分钟才告警（冷却期 60s，给半开试探留时间）
+      - alert: CircuitBreakerOpen
+        expr: |
+          max by (tier) (circuit_breaker_state) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "模型档位 {{ $labels.tier }} 熔断器持续打开"
+          description: "{{ $labels.tier }} 档拉闸超过 1 分钟，failover 链可能已耗尽。检查该档模型端点是否可用。"
+
+      # ========== 告警3：5xx 错误率过高 ==========
+      # PromQL 解读：
+      #   sum(rate(http_requests_total{status=~"5.."}[5m])) by (path)
+      #     → 过去 5 分钟，5xx 状态码的请求速率（每秒多少个）
+      #   sum(rate(http_requests_total[5m])) by (path)
+      #     → 过去 5 分钟，全部请求的速率
+      #   两者相除 → 错误率
+      #   / (sum(rate(...)) > 0) → 除以自身做保护：没有流量时结果为 NaN，不触发
+      #   > 0.05 → 错误率超过 5%
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (path)
+            /
+            sum(rate(http_requests_total[5m])) by (path)
+          ) > 0.05
+          and
+          sum(rate(http_requests_total[5m])) by (path) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "接口 {{ $labels.path }} 错误率超过 5%"
+          description: "当前错误率 {{ $value | humanizePercentage }}，持续 5 分钟。检查后端日志中同 path 的 ERROR 日志。"

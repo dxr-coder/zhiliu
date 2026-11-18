@@ -1,0 +1,15 @@
+# 测试依赖 — 只装纯单测 import 链需要的包
+# 原则：不装 torch / chromadb / sentence-transformers（~2GB，CI 几分钟白跑）
+# 被测模块（auth/rate_limiter/cache/model_router/ticket_approval/rrf）的 import 链只依赖下面这些
+pytest
+fakeredis
+
+# 与 requirements.txt 同源（版本不锁死，跟随主依赖演进）
+fastapi
+PyJWT
+bcrypt
+pymysql
+DBUtils
+redis
+python-dotenv
+openai

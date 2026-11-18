@@ -1,0 +1,46 @@
+# ========== Web 框架 ==========
+fastapi==0.156.2
+uvicorn[standard]
+pydantic==2.14.1
+python-multipart==0.0.32
+
+# ========== 数据库 ==========
+PyMySQL==1.2.3
+DBUtils==3.2.0
+
+# ========== 缓存与限流 ==========
+redis==8.1.0
+
+# ========== 认证 ==========
+PyJWT==2.15.1
+bcrypt==5.0.0
+
+# ========== 配置管理 ==========
+python-dotenv==1.2.4
+
+# ========== LLM 调用 ==========
+openai==3.35.1
+httpx
+
+# ========== LangChain（Agent + RAG） ==========
+# 版本约束而非精确锁定：langchain 生态迭代快，锁太死会和 chromadb/langgraph 冲突
+langchain-openai>=0.2.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-text-splitters>=0.3.0,<0.4.0
+langgraph>=0.2.0,<0.4.0
+
+# ========== 向量数据库 + Embedding ==========
+# 这两个包体积大（合计>2GB），CI/开发环境按需安装，不锁死版本
+chromadb
+sentence-transformers
+
+# ========== 文档解析（知识库上传） ==========
+pypdf==6.18.1
+PyMuPDF
+python-docx==1.2.0
+openpyxl==3.1.5
+beautifulsoup4
+
+# ========== 评测 ==========
+# （JUDGE 用 openai SDK，无需额外包）
+prometheus_client==0.26.0
